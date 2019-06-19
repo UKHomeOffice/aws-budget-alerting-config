@@ -1,0 +1,70 @@
+pipeline:
+  dependencies:
+    image: docker:git
+    commands:
+      - git clone -b CDMP-2366 https://github.com/UKHomeOffice/aws-budget-alerting.git
+    when:
+      event:
+        - push
+
+  build:
+    image: lambci/lambda:build-nodejs8.10
+    commands:
+      # cd to cloned repo from dependencies step
+      - cd aws-budget-alerting
+      # create a python virtual env that is going to be used in this and following steps
+      - make venv
+      # activate the virtual env
+      - source venv/bin/activate
+      # build the AWS SAM functions
+      - make build
+    when:
+      event:
+        - push
+
+  package:
+    image: lambci/lambda:build-nodejs8.10
+    secrets:
+      - lambda_package_bucket
+      - aws_default_region
+      - aws_access_key_id
+      - aws_secret_access_key
+    commands:
+      # cd to cloned repo from dependencies step
+      - cd aws-budget-alerting
+      # activate virtual env created during build step
+      - source venv/bin/activate
+      # package the AWS SAM functions
+      - make package
+    when:
+      event:
+        - push
+
+  deploy:
+    image: lambci/lambda:build-nodejs8.10
+    secrets:
+      - actual_cost_webhook_url
+      - forecasted_cost_webhook_url
+      - aws_default_region
+      - aws_access_key_id
+      - aws_secret_access_key
+    commands:
+      # get the budget and alert trigger percentages
+      - source ./parameters.sh
+      # cd to cloned repo from dependencies step
+      - cd aws-budget-alerting
+      # activate virtual env created during build step
+      - source venv/bin/activate
+      # delete the current stack
+      - make delete-stack
+      # make the values of the params visible in the drone output
+      - echo "Monthly Budget = $MONTHLY_BUDGET"
+      - echo "Actual Threshold Percentage = $ACTUAL_THRESHOLD_PERCENTAGE"
+      - echo "Forecasted Threshold Percentage = $FORECAST_THRESHOLD_PERCENTAGE"
+      - echo "Message Prefix = $MESSAGE_PREFIX"
+      # ... and re-deploy it
+      - ./deploy.sh $MONTHLY_BUDGET $ACTUAL_THRESHOLD_PERCENTAGE $FORECAST_THRESHOLD_PERCENTAGE "$MESSAGE_PREFIX"
+    when:
+      event:
+        - push
+      branch: [master]
