@@ -1,0 +1,4 @@
+fileignoreconfig:
+- filename: README.md
+  checksum: 99702fad74dcaedf5d416e0fbaeb073f099db98b1e7054f935fa33698bdbf192
+  ignore_detectors: []
